@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Вход — Строй Лидер</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="auth container">
+    <section class="card">
+      <h1>Вход</h1>
+      <div class="row"><label>Логин</label><input id="login"></div>
+      <div class="row"><label>Пароль</label><input id="password" type="password"></div>
+      <div class="actions"><button id="doLogin" class="btn primary">Войти</button></div>
+      <p id="status" class="status"></p>
+    </section>
+  </main>
+  <script>
+    document.getElementById('doLogin').onclick = async () => {
+      const r = await fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ login: login.value, password: password.value })});
+      const j = await r.json();
+      if (j.ok) location.href = '/scanner'; else status.textContent = j.error || 'Ошибка входа';
+    };
+  </script>
+</body>
+</html>

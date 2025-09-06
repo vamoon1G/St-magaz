@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Поиск — Строй Лидер</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script defer src="/app.search.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="container row-between">
+      <h1>Поиск</h1>
+      <nav>
+        <a class="link" href="/scanner">Сканер</a>
+        <button id="logout" class="btn outline small">Выйти</button>
+      </nav>
+    </div>
+  </header>
+  <main class="container">
+    <section class="card">
+      <input id="search" placeholder="введите название или штрих‑код" />
+      <ul id="results" class="list with-hover"></ul>
+      <p class="muted small">Подсказка: наведи на товар — появится иконка перехода, если он уже зарегистрирован.</p>
+    </section>
+  </main>
+</body>
+</html>
