@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Строй Лидер — Сканер</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <!-- ZXing для браузера -->
+  <script defer src="https://unpkg.com/@zxing/library@0.20.0"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="container row-between">
+      <h1>Строй Лидер</h1>
+      <span class="badge">MVP</span>
+    </div>
+    <p class="muted container">Сканируй штрих‑код, смотри/редактируй товар.</p>
+  </header>
+
+  <main class="container">
+    <section class="card scanner">
+      <div class="video-wrap">
+        <video id="video" playsinline></video>
+        <div id="overlay">Наведи камеру на штрих‑код</div>
+      </div>
+      <div class="grid-2 gap">
+        <button id="startScan" class="btn primary">Включить камеру</button>
+        <button id="stopScan" class="btn outline">Выключить</button>
+      </div>
+      <div class="grid-2 gap top8">
+        <label class="btn outline file-btn">
+          <input id="pickImage" type="file" accept="image/*" capture="environment" hidden />
+          Распознать с фото
+        </label>
+        <button id="flipCam" class="btn outline">Поменять камеру</button>
+      </div>
+      <p id="status" class="status"></p>
+    </section>
+
+    <section class="card form">
+      <div class="grid-2 gap">
+        <div class="row"><label>Штрих‑код</label><input id="barcode" placeholder="сканируй или введи" /></div>
+        <div class="row"><label>Ед. изм.</label><input id="unit" placeholder="шт" /></div>
+        <div class="row"><label>Название</label><input id="name" /></div>
+        <div class="row"><label>Цена</label><input id="price" type="number" step="0.01" /></div>
+        <div class="row"><label>Категория</label><input id="category" /></div>
+        <div class="row"><label>Бренд</label><input id="brand" /></div>
+        <div class="row"><label>Остаток</label><input id="stock" type="number" /></div>
+        <div class="row"><label>PIN (для изменений)</label><input id="pin" type="password" placeholder="••••" /></div>
+      </div>
+
+      <div class="actions stick">
+        <button id="saveBtn" class="btn">Создать</button>
+        <button id="updateBtn" class="btn primary">Сохранить</button>
+        <button id="deleteBtn" class="btn danger">Удалить</button>
+      </div>
+    </section>
+
+    <section class="card search">
+      <h2>Быстрый поиск</h2>
+      <input id="search" placeholder="поиск по названию или штрих‑коду" />
+      <ul id="results" class="list"></ul>
+    </section>
+  </main>
+
+  <footer class="container muted small">Камера требует HTTPS в проде или localhost в тесте. Разреши доступ к камере в браузере.</footer>
+</body>
+</html>
