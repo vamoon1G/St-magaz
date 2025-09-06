@@ -43,17 +43,46 @@ async function handleDecoded(text){
   }
 }
 
-async function start(){
-  try{
-    if (!window.isSecureContext && location.hostname !== 'localhost') return setStatus('Нужен HTTPS или localhost');
+async function start() {
+  try {
+    if (!window.isSecureContext && location.hostname !== 'localhost') {
+      setStatus('Нужен HTTPS или localhost');
+      return;
+    }
+
+    // 1) просим заднюю камеру (если есть), иначе любую
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false
+      });
+    } catch (e) {
+      // фолбэк на любую доступную камеру
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
+
+    // 2) показываем превью
+    video.srcObject = stream;
+    await video.play();
+
+    // 3) берём deviceId из реального трека — это надёжнее, чем перечисление устройств
+    const track = stream.getVideoTracks()[0];
+    const deviceId = track?.getSettings?.().deviceId || null;
+
+    // 4) запускаем ZXing
     codeReader = new ZXing.BrowserMultiFormatReader();
-    const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
-    const back = devices.find(d=>/back|rear|environment/i.test(d.label)) || devices[0];
-    stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: back?.deviceId || undefined } });
-    video.srcObject = stream; await video.play();
-    codeReader.decodeFromVideoDevice(back?.deviceId || null, video, (result)=>{ if(result) handleDecoded(result.getText()); });
+    codeReader.decodeFromVideoDevice(deviceId, video, (result, err) => {
+      if (result) handleDecoded(result.getText());
+    });
+
     setStatus('Сканер запущен');
-  }catch(e){ setStatus('Ошибка камеры: '+e.message); }
+  } catch (e) {
+    if (e.name === 'NotAllowedError') setStatus('Дай разрешение на камеру в браузере.');
+    else if (e.name === 'NotFoundError') setStatus('Камера не найдена.');
+    else if (e.name === 'NotReadableError') setStatus('Камера занята другим приложением.');
+    else setStatus('Ошибка камеры: ' + e.message);
+  }
 }
 function stop(){ try{ codeReader?.reset(); }catch{} if(stream){stream.getTracks().forEach(t=>t.stop()); stream=null;} setStatus('Сканер остановлен'); }
 
