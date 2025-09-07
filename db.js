@@ -24,6 +24,7 @@ export const queries = {
                       WHERE name LIKE ? OR barcode LIKE ?
                       ORDER BY updated_at DESC LIMIT 100`),
   listCategoriesDistinct: db.prepare(`SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category <> '' ORDER BY category COLLATE NOCASE`),
+  listBrandsDistinct: db.prepare(`SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL AND brand <> '' ORDER BY brand COLLATE NOCASE`),
   create: db.prepare(`INSERT INTO products (barcode, name, price, unit, category, brand, stock, created_at)
                       VALUES (@barcode, @name, @price, @unit, @category, @brand, @stock, @created_at)`),
   update: db.prepare(`UPDATE products SET

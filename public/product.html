@@ -13,6 +13,7 @@
       <h1 id="title">Товар</h1>
       <nav>
         <a class="link" href="/search">Поиск</a>
+        <a class="link" href="/scanner">Сканер</a>
         <button id="logout" class="btn outline small">Выйти</button>
       </nav>
     </div>
@@ -20,7 +21,7 @@
   <main class="container">
     <section class="card form">
       <div class="floating-edit">
-        <button id="editToggle" class="fab" title="Редактировать"><img src="/assets/edit.svg" alt="edit"></button>
+        <button id="editToggle" class="fab" title="Редактировать"><img src="/assets/red.png" alt="edit"></button>
       </div>
       <div class="grid-2 gap">
         <div class="row"><label>Штрих‑код</label><input id="barcode" disabled/></div>
@@ -28,14 +29,15 @@
         <div class="row"><label>Цена*</label><input id="price" type="number" step="0.01" disabled/></div>
         <div class="row"><label>День регистрации*</label><input id="created_at" type="date" disabled/></div>
         <div class="row"><label>Категория</label><input id="category" list="cats" disabled/></div>
-        <div class="row"><label>Бренд</label><input id="brand" disabled/></div>
+        <div class="row"><label>Бренд</label><input id="brand" list="brands" disabled/></div>
         <div class="row"><label>Остаток</label><input id="stock" type="number" disabled/></div>
       </div>
       <datalist id="cats"></datalist>
+      <datalist id="brands"></datalist>
 
       <div class="actions stick hidden" id="editActions">
         <button id="saveBtn" class="btn primary">Сохранить</button>
-        <button id="cancelBtn" class="btn">Отмена</button>
+        <button id="cancelBtn" class="btn outline">Отмена</button>
         <button id="deleteBtn" class="btn danger">Удалить</button>
       </div>
       <p id="status" class="status"></p>

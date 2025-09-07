@@ -18,11 +18,37 @@
     </div>
   </header>
   <main class="container">
-    <section class="card">
-      <input id="search" placeholder="введите название или штрих‑код" />
-      <ul id="results" class="list with-hover"></ul>
-      <p class="muted small">Подсказка: наведи на товар — появится иконка перехода, если он уже зарегистрирован.</p>
-    </section>
+   <section class="card">
+  <div class="floating-edit">
+    <button id="editToggle" class="fab" title="Редактировать"><img src="/assets/red.png" alt="edit"></button>
+  </div>
+  <div class="row">
+    <label class="muted">Поиск</label>
+    <input id="search" placeholder="Название или штрих-код" />
+  </div>
+
+  <div class="actions">
+    <button id="sortAZ" class="btn outline">А-Я</button>
+    <button id="sortPrice" class="btn outline">По цене</button>
+  </div>
+
+  <div id="bulkActions" class="actions hidden">
+    <label class="muted" style="display:flex;align-items:center;gap:6px">
+      <input id="selectAll" type="checkbox" /> Выделить все
+    </label>
+    <button id="bulkDelete" class="btn danger small" disabled>Удалить выбранные</button>
+    <span id="selectedCount" class="muted small"></span>
+  </div>
+
+  <ul id="results" class="list with-hover"></ul>
+  <p id="count" class="muted small"></p>
+</section>
   </main>
+  <script>
+    document.getElementById('logout')?.addEventListener('click', async () => {
+      try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+      location.href = '/login';
+    });
+  </script>
 </body>
 </html>

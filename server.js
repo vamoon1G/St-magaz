@@ -73,6 +73,13 @@ app.get('/api/categories', requireAuth, (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+app.get('/api/brands', requireAuth, (req, res) => {
+  try {
+    const rows = queries.listBrandsDistinct.all();
+    res.json({ ok: true, data: rows.map(r => r.brand) });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 app.post('/api/products', requireAuth, (req, res) => {
   const { barcode, name, price, created_at, category, brand, stock } = req.body;
   if (!barcode || !name || price == null) return res.status(400).json({ error: 'barcode, name, price обязательны' });
@@ -114,6 +121,19 @@ app.put('/api/products/:barcode', requireAuth, (req, res) => {
 app.delete('/api/products/:barcode', requireAuth, (req, res) => {
   try { queries.remove.run(req.params.barcode); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Bulk delete products by barcodes array
+app.post('/api/products/bulk-delete', requireAuth, (req, res) => {
+  try {
+    const barcodes = Array.isArray(req.body?.barcodes) ? req.body.barcodes.map(String) : [];
+    if (!barcodes.length) return res.status(400).json({ ok: false, error: 'no_barcodes' });
+    let deleted = 0;
+    for (const bc of barcodes) {
+      try { queries.remove.run(bc); deleted++; } catch {}
+    }
+    res.json({ ok: true, deleted });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.listen(PORT, () => console.log(`Строй Лидер v2 на http://localhost:${PORT}`));

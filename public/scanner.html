@@ -21,9 +21,13 @@
   <main class="container">
     <section class="card scanner">
       <div class="video-wrap"><video id="video" playsinline></video><div id="overlay">Наведи камеру на штрих‑код</div></div>
-      <div class="grid-2 gap top8">
+      <div class="actions top8">
         <button id="startScan" class="btn primary">Включить камеру</button>
         <button id="stopScan" class="btn outline">Выключить</button>
+        <label class="btn outline">
+          <input id="pickImage" type="file" accept="image/*,.heic,.HEIC" capture="environment" hidden>
+          Фото с кодом
+        </label>
       </div>
       <p id="status" class="status"></p>
     </section>
@@ -31,16 +35,18 @@
     <section class="card form">
       <div class="grid-2 gap">
         <div class="row"><label>Штрих‑код</label><input id="barcode" placeholder="сканируй или введи" /></div>
-        <div class="row"><label>Название*</label><input id="name" /></div>
-        <div class="row"><label>Цена*</label><input id="price" type="number" step="0.01" /></div>
+        <div class="row"><label>Название*</label><input id="name" placeholder="Например: Саморез 3.5x25" /></div>
+        <div class="row"><label>Цена*</label><input id="price" type="number" step="0.01" placeholder="0.00" /></div>
         <div class="row"><label>День регистрации*</label><input id="created_at" type="date" /></div>
-        <div class="row"><label>Категория</label><input id="category" list="cats" placeholder="необязательно" /></div>
-        <div class="row"><label>Бренд</label><input id="brand" placeholder="необязательно" /></div>
-        <div class="row"><label>Остаток</label><input id="stock" type="number" placeholder="необязательно" /></div>
+        <div class="row"><label>Категория</label><input id="category" list="cats" placeholder="Необязательно" /></div>
+        <div class="row"><label>Бренд</label><input id="brand" list="brands" placeholder="Необязательно" /></div>
+        <div class="row"><label>Остаток</label><input id="stock" type="number" placeholder="Необязательно" /></div>
       </div>
       <datalist id="cats"></datalist>
+      <datalist id="brands"></datalist>
       <div class="actions stick">
         <button id="createBtn" class="btn primary">Создать товар</button>
+        <a class="btn outline" href="/search">К списку</a>
       </div>
     </section>
   </main>
