@@ -97,14 +97,20 @@ const pickImage = document.getElementById('pickImage');
 pickImage?.addEventListener('change', async (e) => {
   let file = e.target.files?.[0];
   if (!file) return;
-  setStatus('Распознаём фото…');
+  resetDecodeLog();
+  setStatus('Готовим фото…');
+  logStep(`Исходный файл: name=${file.name||'(без имени)'} type=${file.type||'(unknown)'} size=${fmtSize(file.size)}`);
 
   // HEIC → JPEG конвертация, если требуется
-  file = await convertHeicIfNeeded(file);
-
-  const url = URL.createObjectURL(file);
+  const conv = await convertHeicIfNeeded(file);
+  if (!conv?.blob) { setStatus('Не удалось открыть HEIC. Попробуйте JPEG/PNG.'); logStep('Конвертация не удалась.'); return; }
+  logStep(`Конвертация: метод=${conv.method} → type=${conv.blob.type||'(unknown)'} size=${fmtSize(conv.blob.size)}`);
+  const url = URL.createObjectURL(conv.blob);
   const img = new Image();
   img.onload = async () => {
+    logStep(`Изображение загружено: ${img.width}x${img.height}`);
+    showPreview(url, conv.blob.type||'image/*');
+    setStatus('Распознаём фото…');
     try {
       const resultText = await robustDecodeFromImage(img);
       if (resultText) {
@@ -114,6 +120,7 @@ pickImage?.addEventListener('change', async (e) => {
         setStatus('Не удалось распознать код на фото');
       }
     } catch (err) {
+      console.error('[scanner] decode error', err);
       setStatus('Не удалось распознать код на фото');
     } finally {
       URL.revokeObjectURL(url);
@@ -133,20 +140,46 @@ async function robustDecodeFromImage(img) {
     }
   } catch {}
 
-  // 2) Через канвас, с поворотами и подсказками
-  const base = drawScaled(img, 1600);
-  const hints = new Map();
-  try { hints.set(ZXing.DecodeHintType.TRY_HARDER, true); } catch {}
-  try { hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.UPC_A,
-    ZXing.BarcodeFormat.CODE_128,
-    ZXing.BarcodeFormat.CODE_39,
-    ZXing.BarcodeFormat.ITF
-  ]); } catch {}
+  // 2) Попытка через нативный BarcodeDetector (если доступен)
+  try {
+    if ('BarcodeDetector' in window) {
+      const bd = new window.BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','code_128','code_39','itf'] });
+      // Пробуем оригинал и повороты
+      const tries = [img];
+      // create a canvas scaled for detector (небольшой для скорости)
+      const baseSmall = drawScaled(img, 1600);
+      tries.push(baseSmall);
+      const r0 = await bd.detect(tries[0]).catch(()=>[]);
+      const r1 = r0?.length ? r0 : await bd.detect(tries[1]).catch(()=>[]);
+      const found = r1?.[0]?.rawValue;
+      if (found) return found;
+    }
+  } catch {}
 
-  const angles = [0, 90, 180, 270];
+  // 3) Через канвас, с поворотами и подсказками
+  const base = drawScaled(img, 1800);
+  // Несколько вариантов подсказок: сначала фокус на EAN‑13/UPC‑A (книги/товары), затем шире
+  const hintsVariants = [];
+  try {
+    const baseHints = new Map();
+    baseHints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    baseHints.set(ZXing.DecodeHintType.ASSUME_GS1, true);
+    const narrow = new Map(baseHints);
+    narrow.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.UPC_A]);
+    const wide = new Map(baseHints);
+    wide.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.ITF
+    ]);
+    hintsVariants.push(narrow, wide);
+  } catch { hintsVariants.push(null); }
+
+  // Набор углов, включая небольшие повороты для фотографий "чуть под углом"
+  const angles = [0, 3, -3, 6, -6, 10, -10, 14, -14, 20, -20, 90, 180, 270];
   for (const ang of angles) {
     const c = ang ? rotateCanvas(base, ang) : base;
     // Сначала пробуем гибридный, затем глобальную гистограмму
@@ -155,19 +188,36 @@ async function robustDecodeFromImage(img) {
       (src) => new ZXing.Common.GlobalHistogramBinarizer(src)
     ];
     for (const mkBin of tryBin) {
-      const text = tryDecodeCanvas(c, hints, mkBin);
-      if (text) return text;
-      // Небольшое центрированное кадрирование 80% — иногда помогает
-      const cropped = cropCenter(c, 0.85);
-      const text2 = tryDecodeCanvas(cropped, hints, mkBin);
-      if (text2) return text2;
-      // Полосы по центру (полезно для 1D кодов)
-      for (const stripe of cropHorizontalStripes(c)) {
-        const t3 = tryDecodeCanvas(stripe, hints, mkBin);
-        if (t3) return t3;
+      for (const hints of hintsVariants) {
+        const text = tryDecodeCanvas(c, hints, mkBin);
+        if (text) return text;
+        // Небольшое центрированное кадрирование — иногда помогает
+        const cropped = cropCenter(c, 0.88);
+        const text2 = tryDecodeCanvas(cropped, hints, mkBin);
+        if (text2) return text2;
+        // Полосы по центру (полезно для 1D кодов)
+        for (const stripe of cropHorizontalStripes(c)) {
+          const t3 = tryDecodeCanvas(stripe, hints, mkBin);
+          if (t3) return t3;
+        }
+        // Дополнительно: предварительная бинаризация Otsu на срезах
+        const bw = binarizeOtsu(c);
+        const t4 = tryDecodeCanvas(bw, hints, mkBin);
+        if (t4) return t4;
       }
     }
   }
+  // 4) Fallback: Quagga2 (иногда лучше ловит EAN‑13 на фото)
+  try {
+    logStep('Fallback Quagga2: пробуем распознать по всему кадру');
+    const q1 = await quaggaDecodeFromCanvas(base);
+    if (q1) return q1;
+    for (const ang of [90,180,270]){
+      const c = rotateCanvas(base, ang);
+      const q = await quaggaDecodeFromCanvas(c);
+      if (q) return q;
+    }
+  } catch (e) { console.warn('Quagga fallback error', e); }
   return null;
 }
 
@@ -187,19 +237,29 @@ function loadHeic2Any() {
 }
 
 async function convertHeicIfNeeded(file){
-  const isHeic = /heic$/i.test(file.name) || file.type === 'image/heic' || file.type === 'image/heif';
-  if (!isHeic) return file;
+  const isHeic = /\.heic$/i.test(file.name || '') || /heic|heif/i.test(file.type || '');
+  if (!isHeic) return { blob: file, method: 'pass-through' };
   try {
     await loadHeic2Any();
-    if (!window.heic2any) return file;
-    const out = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 });
-    const blob = Array.isArray(out) ? out[0] : out;
-    return new File([blob], file.name.replace(/\.heic$/i, '.jpg'), { type: 'image/jpeg' });
-  } catch (e) {
-    // Если не удалось — возвращаем исходный файл; ниже возникнет ошибка загрузки <img>
-    setStatus('HEIC не поддерживается этим браузером. Попробуйте JPEG/PNG.');
-    return file;
-  }
+    if (window.heic2any) {
+      // Convert to PNG for maximum compatibility
+      const out = await window.heic2any({ blob: file, toType: 'image/png' });
+      const blob = Array.isArray(out) ? out[0] : out;
+      return { blob, method: 'heic2any->png' };
+    }
+  } catch {}
+  try {
+    if (window.createImageBitmap) {
+      const bmp = await window.createImageBitmap(file);
+      const c = document.createElement('canvas');
+      c.width = bmp.width; c.height = bmp.height;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(bmp, 0, 0);
+      const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+      if (blob) return { blob, method: 'imageBitmap->canvas->png' };
+    }
+  } catch {}
+  return { blob: null, method: 'failed' };
 }
 
 function drawScaled(img, maxW) {
@@ -209,8 +269,7 @@ function drawScaled(img, maxW) {
   canvas.height = Math.round(img.height * ratio);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.imageSmoothingEnabled = false;
-  // Усиливаем контраст и слегка повышаем яркость
-  ctx.filter = 'contrast(160%) brightness(105%)';
+  // Убрали фильтры: иногда они портят 1D коды (пересатурация)
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   return canvas;
 }
@@ -257,6 +316,7 @@ function cropHorizontalStripes(src) {
 
 function tryDecodeCanvas(canvas, hints, mkBinarizer) {
   try {
+    logStep(`Пробуем decode: ${canvas.width}x${canvas.height} binarizer=${mkBinarizer.name||'unknown'}`);
     const luminance = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
     const binarizer = mkBinarizer(luminance);
     const bitmap = new ZXing.BinaryBitmap(binarizer);
@@ -265,6 +325,96 @@ function tryDecodeCanvas(canvas, hints, mkBinarizer) {
     const result = reader.decode(bitmap);
     return result?.getText ? result.getText() : result?.text || null;
   } catch { return null; }
+}
+
+// ---------- Quagga2 fallback ----------
+let quaggaLoaderPromise = null;
+function loadQuagga(){
+  if (window.Quagga) return Promise.resolve();
+  if (quaggaLoaderPromise) return quaggaLoaderPromise;
+  quaggaLoaderPromise = new Promise((resolve, reject) => {
+    const urls = [
+      'https://cdn.jsdelivr.net/npm/quagga2@1.2.6/dist/quagga.min.js',
+      'https://unpkg.com/quagga2@1.2.6/dist/quagga.min.js'
+    ];
+    let i = 0;
+    const tryNext = () => {
+      if (i >= urls.length) return reject(new Error('Quagga load failed'));
+      const s = document.createElement('script');
+      s.src = urls[i++];
+      s.onload = () => resolve();
+      s.onerror = () => { s.remove(); tryNext(); };
+      document.head.appendChild(s);
+    };
+    tryNext();
+  });
+  return quaggaLoaderPromise;
+}
+
+async function quaggaDecodeFromCanvas(canvas){
+  await loadQuagga();
+  if (!window.Quagga) return null;
+  const dataUrl = canvas.toDataURL('image/png');
+  return new Promise((resolve) => {
+    window.Quagga.decodeSingle({
+      src: dataUrl,
+      numOfWorkers: 0,
+      inputStream: { size: Math.max(canvas.width, canvas.height) },
+      locator: { halfSample: false, patchSize: 'large' },
+      decoder: { readers: ['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader','code_39_reader','itf_reader'] }
+    }, (result) => {
+      const code = result?.codeResult?.code || null;
+      if (code) logStep('Quagga2: найден код ' + code);
+      resolve(code);
+    });
+  });
+}
+
+// ---------- Simple Otsu binarization ----------
+function binarizeOtsu(src){
+  const c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(src, 0, 0);
+  const img = ctx.getImageData(0,0,c.width,c.height); const d = img.data;
+  const hist = new Uint32Array(256);
+  for (let i=0;i<d.length;i+=4){ const g=(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2])|0; hist[g]++; }
+  let sum=0; for (let t=0;t<256;t++) sum+=t*hist[t];
+  let sumB=0, wB=0, wF=0, mB=0, mF=0, max=0, thresh=127; const tot=c.width*c.height;
+  for (let t=0;t<256;t++){ wB+=hist[t]; if (wB===0) continue; wF=tot-wB; if (wF===0) break; sumB+=t*hist[t]; mB=sumB/wB; mF=(sum-sumB)/wF; const between=wB*wF*(mB-mF)*(mB-mF); if (between>max){ max=between; thresh=t; } }
+  for (let i=0;i<d.length;i+=4){ const g=(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2])|0; const v = g>thresh?255:0; d[i]=d[i+1]=d[i+2]=v; d[i+3]=255; }
+  ctx.putImageData(img,0,0); return c;
+}
+
+// ---------- Debug log helpers ----------
+function ensureLogBox(){
+  let box = document.getElementById('decodeLogBox');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'decodeLogBox';
+    box.style.marginTop = '8px';
+    box.style.padding = '8px';
+    box.style.border = '1px dashed var(--border)';
+    box.style.borderRadius = '8px';
+    box.style.background = 'rgba(17,22,28,.6)';
+    const parent = statusEl?.parentElement || document.body;
+    parent.appendChild(box);
+  }
+  return box;
+}
+function logStep(text){
+  // UI logging disabled: keep console output only
+  console.log('[scanner]', text);
+}
+function resetDecodeLog(){
+  const box = document.getElementById('decodeLogBox');
+  if (box) box.innerHTML = '';
+}
+function fmtSize(n){ if (!Number.isFinite(n)) return '—'; const kb = n/1024; return kb<1024? `${kb.toFixed(1)} KB` : `${(kb/1024).toFixed(2)} MB`; }
+function showPreview(url, type){
+  const box = ensureLogBox();
+  let img = document.getElementById('convertedPreview');
+  if (!img) { img = document.createElement('img'); img.id='convertedPreview'; img.style.maxWidth='100%'; img.style.marginTop='8px'; img.style.borderRadius='8px'; img.style.border='1px solid var(--border)'; box.appendChild(img); }
+  img.src = url; img.alt = `converted (${type})`;
 }
 
 
