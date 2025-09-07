@@ -15,6 +15,7 @@ const stockEl = document.getElementById('stock');
 const createBtn = document.getElementById('createBtn');
 
 let codeReader, stream;
+let lastDecoded = null; let lastDecodedAt = 0;
 
 createdAtEl.valueAsDate = new Date();
 
@@ -39,6 +40,10 @@ loadCategories();
 function setStatus(m){ statusEl.textContent=m||''; }
 
 async function handleDecoded(text){
+  // debounce repeated callbacks from camera
+  const now = Date.now();
+  if (text === lastDecoded && (now - lastDecodedAt) < 2500) return;
+  lastDecoded = text; lastDecodedAt = now;
   overlay.textContent = `Найден код: ${text}`;
   barcodeEl.value = text;
   const r = await fetch(`/api/products?barcode=${encodeURIComponent(text)}`);
@@ -48,7 +53,27 @@ async function handleDecoded(text){
     setTimeout(()=> location.href = `/product/${encodeURIComponent(text)}`, 600);
   } else {
     nameEl.focus();
-    setStatus('Новый товар — заполни поля и создай.');
+    setStatus('Новый товар — ищем данные по коду…');
+    // Попробуем подтянуть данные из внешних источников
+    try {
+      const lr = await fetch(`/api/lookup?barcode=${encodeURIComponent(text)}`);
+      const lj = await lr.json();
+      if (lj?.attempts) {
+        try { console.table(lj.attempts.map(a=>({source:a.source, candidate:a.candidate, status:a.status, ok:a.ok, matched:a.matched, url:a.url||'', error:a.error||''}))); } catch{}
+        console.log('[lookup attempts full]', lj.attempts);
+      }
+      console.log('[lookup full]', lj);
+      if (lj?.data) {
+        if (lj.data.name && !nameEl.value) nameEl.value = lj.data.name;
+        if (lj.data.brand && !brandEl.value) brandEl.value = lj.data.brand;
+        if (lj.data.category && !categoryEl.value) categoryEl.value = lj.data.category;
+        setStatus(`Нашли в ${lj.data.source || 'каталоге'} — проверь и сохрани`);
+      } else {
+        setStatus('По коду ничего не нашли — заполни поля вручную');
+      }
+    } catch {
+      setStatus('Ошибка поиска по коду — заполни поля вручную');
+    }
   }
 }
 
@@ -427,7 +452,33 @@ barcodeEl.addEventListener('change', async()=>{
   const code = barcodeEl.value.trim(); if(!code) return;
   const r = await fetch(`/api/products?barcode=${encodeURIComponent(code)}`);
   const j = await r.json();
-  if (j.data) location.href = `/product/${encodeURIComponent(code)}`;
+  if (j.data) {
+    location.href = `/product/${encodeURIComponent(code)}`;
+    return;
+  }
+  // Если товара нет — пробуем внешние источники, как при сканировании
+  setStatus('Ищем данные по этому коду…');
+  try {
+    const lr = await fetch(`/api/lookup?barcode=${encodeURIComponent(code)}`);
+    const lj = await lr.json();
+    if (lj?.attempts) {
+      try { console.table(lj.attempts.map(a=>({source:a.source, candidate:a.candidate, status:a.status, ok:a.ok, matched:a.matched, url:a.url||'', error:a.error||''}))); } catch{}
+      console.log('[lookup attempts full]', lj.attempts);
+    }
+    console.log('[lookup full]', lj);
+    if (lj?.data) {
+      if (lj.data.name && !nameEl.value) nameEl.value = lj.data.name;
+      if (lj.data.brand && !brandEl.value) brandEl.value = lj.data.brand;
+      if (lj.data.category && !categoryEl.value) categoryEl.value = lj.data.category;
+      setStatus(`Нашли в ${lj.data.source || 'каталоге'} — проверь и сохрани`);
+      nameEl.focus();
+    } else {
+      setStatus('По коду ничего не нашли — заполни поля вручную');
+      nameEl.focus();
+    }
+  } catch {
+    setStatus('Ошибка поиска по коду — заполни поля вручную');
+  }
 });
 
 createBtn.onclick = async ()=>{

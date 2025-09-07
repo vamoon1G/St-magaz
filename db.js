@@ -16,6 +16,17 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (date('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  -- cache for external lookups
+  CREATE TABLE IF NOT EXISTS ext_cache (
+    barcode TEXT PRIMARY KEY,
+    source TEXT,
+    json TEXT,
+    name TEXT,
+    brand TEXT,
+    category TEXT,
+    image TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 export const queries = {
@@ -34,4 +45,19 @@ export const queries = {
                         updated_at=datetime('now')
                       WHERE barcode=@barcode`),
   remove: db.prepare('DELETE FROM products WHERE barcode = ?')
+};
+
+// External cache helpers
+export const extCache = {
+  get: db.prepare('SELECT * FROM ext_cache WHERE barcode = ?'),
+  upsert: db.prepare(`INSERT INTO ext_cache (barcode, source, json, name, brand, category, image, updated_at)
+                      VALUES (@barcode, @source, @json, @name, @brand, @category, @image, datetime('now'))
+                      ON CONFLICT(barcode) DO UPDATE SET
+                        source=excluded.source,
+                        json=excluded.json,
+                        name=excluded.name,
+                        brand=excluded.brand,
+                        category=excluded.category,
+                        image=excluded.image,
+                        updated_at=datetime('now')`)
 };
